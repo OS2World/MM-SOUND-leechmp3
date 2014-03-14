@@ -1,0 +1,8 @@
+/* */
+
+   parse arg msg'\\'title'\\'button
+   If RXFUNCQUERY('SysLoadFuncs') Then Do
+      Call rxfuncadd 'SysLoadFuncs', 'REXXUTIL', 'SYSLOADFUNCS'
+      Call sysloadfuncs
+   End
+return rxmessagebox(msg, title, button)

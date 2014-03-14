@@ -1,0 +1,33 @@
+                          Upload Information Template for Hobbes.nmsu.edu
+                          ===============================================
+
+        Archive Filename: leechmp3_340.zip
+       Short Description: direct mp3 encoding from an audio CD with CDDB access
+        Long Description: Uses Leech or Tonigy as a CD grabber, LAME as a MP3
+encoder and run them simultaneously to reduice encoding time.
+with CDDB access capability to retrieve
+tracks titles.
+     LEECHMP3 also speaks to let you know operations progress.
+     REXX Source code is provided as sample.
+
+
+      Proposed directory
+           for placement: /pub/os2/apps/mmedia/sound/convert
+
+               Your name: Michel SUCH
+           Email address: msuch@free.fr
+    Program contact name: (same)
+   Program contact email: (same)
+             Program URL: (none)
+
+      Would you like the
+   contact email address
+    included in listings? yes
+
+Operating System/Version: OS/2 3.0 or later
+ Additional requirements: EMXRT 09.d, LEECH120.ZIP or TONIGY and any LAME version
+
+                Replaces: (leechmp3_330.zip)
+
+
+

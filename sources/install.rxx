@@ -1,0 +1,349 @@
+/********************************************************************/
+/*                                                                  */
+/* INSTALL programm for LEECHMP3 Version 2.0                        */
+/*                                                                  */
+/* Author: Michel SUCH. Email: msuch@free.fr                        */
+/*                                                                  */
+/********************************************************************/
+
+   SIGNAL ON HALT NAME UserAbort
+   call presentation
+   call init_prog
+   call get_parms
+   call make_dirs
+   call copyfiles
+   call create_objects
+   say "Installation completed successfully"
+exit
+
+
+init_prog:
+
+   if RxfuncQuery('sysloadfuncs') <> 0 then do
+      Call RxFuncAdd 'SysLoadFuncs','RexxUtil','SysLoadFuncs'
+      Call SysLoadFuncs
+   end
+   parse source . . pgm .
+   progdir = filespec('d', pgm) || filespec('p', pgm)
+   rundir = directory()
+return /* init_prog */
+
+
+presentation:
+
+   say "Installation program for LEECHMP3 Version 3.40"
+   say ""
+   say "Author: Michel SUCH. Email: msuch@free.fr"
+   say ""
+return /* presentation */
+
+
+copyfiles:
+
+   partlist = "cdtrklst.EXE copy2cd.EXE lame.exe Leech.EXE leechmp3.EXE",
+   "lmsetttl.exe makempl.EXE pmsay.EXE querycddb.exe zplay.EXE",
+   "cdtrklst.ico config.ico copy2cd.ico leechmp3.ico loadcd.ico",
+   "makempl.ico readme.ico recfldr.ico leechmp3.cfg leechmp3.html lame.txt",
+   "leech.inf"
+   say "COPYING FILES..."
+   do i = 1 to words(partlist)
+      part = word(partlist, i)
+          "@copy" progdir || part lmdir ">nul 2>nul"
+          select
+             when rc = 0 then iterate
+             when rc = -2 then do
+                call error "File" part "not found"
+             end
+             otherwise call error "Error copying file" part
+          end
+   end
+       "@copy sounds\*.mp3" lmdir"\lmsounds >nul 2>nul"
+       if rc <> 0 then call error "Error copying sound files"
+return /* copyfiles */
+
+
+create_objects:
+
+   say "Creating desktop objects..."
+   call sysdestroyobject "<LEECHMP3_FOLDER>"
+
+   Call SysCreateObject,
+         "WPFolder",,
+         "LEECHMP3",,
+         "<WP_DESKTOP>",,
+         "OBJECTID=<LEECHMP3_FOLDER>;"||,
+         "ICONFILE="||lmdir||"\leechmp3.ico;",,
+         "REPLACE"
+   if result <> 1 then call error "Cannot create LEECHMP3 folder"
+
+
+   call SysCreateObject,
+      'WPProgram',,
+      'LAME help',,
+      '<LEECHMP3_FOLDER>',,
+      'EXENAME=E.EXE;',
+      ';OBJECTID=<LAME_HLP>;',
+      ";ICONFILE="||lmdir||"\readme.ico;",
+      ';PARAMETERS=LAME.TXT;',
+      ';STARTUPDIR=' || lmdir || ';',,
+                        'replace'
+   if result <> 1 then call error "Cannot create LAME HELP OBJECT"
+
+   if stream(progdir"LEECH.INF", 'c', 'query exist') <> '' then do
+      call SysCreateObject,
+         'WPProgram',,
+         'LEECH information',,
+         '<LEECHMP3_FOLDER>',,
+         'EXENAME=VIEW.EXE;',
+         ';OBJECTID=<LEECH_INFO>;',
+         ";ICONFILE="||lmdir||"\readme.ico;",
+         ';PARAMETERS=LEECH.INF;',
+         ';STARTUPDIR=' || lmdir || ';',,
+                           'replace'
+      if result <> 1 then call error "Cannot create LEECH information object"
+   end
+
+   call set_title lmdir'\LEECHMP3.HTML', "LEECHMP3 INFORMATION"
+   call SysCreateObject,
+      'WPshadow',,
+      'LEECHMP3.HTML',,
+      '<LEECHMP3_FOLDER>',,
+      'SHADOWID='lmdir || '\LEECHMP3.HTML;',
+      ";ICONFILE="||lmdir||"\readme.ico;",
+      ';TITLE=LEECHMP3 INFORMATION;',,
+                        'replace'
+   if result <> 1 then call error "Cannot create LEECHMP3 INFORMATION object"
+
+   call SysCreateObject,
+      'WPProgram',,
+      'EDIT LEECHMP3 CONFIGURATION FILE',,
+      '<LEECHMP3_FOLDER>',,
+      'EXENAME=E.EXE;',
+      ';OBJECTID=<LEECHMP3CFG>;',
+         ";ICONFILE="||lmdir||"config.ico;",
+      ';PARAMETERS=LEECHMP3.CFG;',
+      ';STARTUPDIR=' || lmdir || ';',,
+                        'replace'
+   if result <> 1 then call error "Cannot create LEECHMP3 configuration object"
+
+   if cdrecord_installed() = 1 then do
+      call SysCreateObject,
+         'WPProgram',,
+         'Save My records to CD',,
+         '<LEECHMP3_FOLDER>',,
+         'EXENAME=' || lmdir ||'\COPY2CD.EXE;',
+         ';OBJECTID=<LMCOPY2CD>;',
+         ";MINIMIZED=YES;",
+         ";PROGTYPE=WINDOWABLEVIO;",
+         ";ICONFILE="||lmdir||"\copy2cd.ico;",
+         ';PARAMETERS=' || cddbdir || ';',
+         ';STARTUPDIR=' || cddbdir || ';',,
+                           'replace'
+      if result <> 1 then call error "Cannot create LEECHMP3 SAVE TO CD object"
+   end
+
+   call SysCreateObject,
+      'WPProgram',,
+      'REBUILD PLAYLISTS',,
+      '<LEECHMP3_FOLDER>',,
+      'EXENAME=' || lmdir ||'\MAKEMPL.EXE;',
+      ';OBJECTID=<MAKEMPL>;',
+      ";MINIMIZED=YES;",
+      ";ICONFILE="||lmdir||"\makempl.ico;",
+      ';STARTUPDIR=' || cddbdir || ';',,
+                        'replace'
+   if result <> 1 then call error "Cannot create LEECHMP3 REBUILD PLAYLISTS object"
+
+  Call SysCreateObject,
+     "WPShadow",,
+     "My Records",,
+     "<LEECHMP3_FOLDER>",,
+     "SHADOWID="cddbdir";",
+     ";ICONFILE="||lmdir||"\recfldr.ico;",,
+     "REPLACE"
+   if result <> 1 then call error "Cannot create LEECHMP3 CDDB object"
+
+   call SysCreateObject,
+      'WPProgram',,
+      'View CD track list',,
+      '<LEECHMP3_FOLDER>',,
+      'EXENAME=' || lmdir ||'\CDTRKLST.EXE;',
+      ';OBJECTID=<CDTRKLST>;',
+      ";ICONFILE="||lmdir||"\cdtrklst.ico;",
+      ";PROGTYPE=WINDOWABLEVIO;",
+      ';STARTUPDIR=' || cddbdir || ';',,
+                        'replace'
+   if result <> 1 then call error "Cannot create View CD track list program object"
+
+   call SysCreateObject,
+      'WPProgram',,
+      'Add a new record',,
+      '<LEECHMP3_FOLDER>',,
+      'EXENAME=' || lmdir ||'\LEECHMP3.EXE;',
+      ';OBJECTID=<LEECHMP3>;',
+      ";ICONFILE="||lmdir||"\loadcd.ico;",
+      ";PROGTYPE=WINDOWABLEVIO;",
+      ';STARTUPDIR=' || cddbdir || ';',,
+                        'replace'
+   if result <> 1 then call error "Cannot create LEECHMP3 program object"
+
+   if associate = "Y" then do
+      call syscreateobject,
+      "WPPROGRAM",,
+      "ZPLAY",,
+      "<LEECHMP3_FOLDER>",,
+      "EXENAME="lmdir"\ZPLAY.EXE;" ||,
+      "NOTVISIBLE=YES;" ||,
+      "MINIMIZED=YES;" ||,
+      "PROGTYPE=WINDOWABLEVIO;" ||,
+      "ASSOCFILTER=*.MP3,*.M3U;",,
+      "REPLACE"
+      if result <> 1 then do
+         say "Warning: cannot associate Z! to æ.MP3 and *M3U files"
+      end
+   end
+return /* create_objects */
+
+
+set_title:
+procedure
+
+   fname = arg(1)
+   title = arg(2)
+   typeinfo = 'FDFF'x || d2c(length(title)) || '00'x || title
+   call SysPutEA fname, ".LONGNAME", typeinfo
+return /* set_title */
+
+cdrecord_installed:
+
+   if find_prog("CDRECORD.EXE") = '' then return 0
+   if find_prog("MKISOFS.EXE") = '' then return 0
+return 1 /* cdrecord_installed */
+
+
+error:
+
+   parse arg msg
+   say msg
+   call cleanup
+exit /* error */
+
+
+UserAbort:
+
+   SAY
+   SAY '  *** LEECHMP3 installation aborted ***'
+   call cleanup
+  EXIT /* userabort */
+
+
+cleanup:
+
+   if cdlmdir = 0 then call sysdestroyobject lmdir
+   if crcddbdir = 0 then call sysdestroyobject cddbdir
+return /* cleanup */
+
+
+make_dirs:
+
+   rc = sysmkdir(lmdir)
+   cdlmdir = rc
+   if (cdlmdir <> 0) & (cdlmdir <> 5) then
+      call error "Cannot create directory" lmdir
+       rc = sysmkdir(lmdir"\lmsounds")
+   if (rc <> 0) & (rc <> 5) then
+      call error "Cannot create directory" lmdir"\LMSOUNDS"
+
+   rc = sysmkdir(cddbdir)
+   crcddbdir = rc
+   if (crcddbdir <> 0) & (crcddbdir <> 5) then
+   call error "Cannot create directory" cddbdir
+   call set_title cddbdir, "My Records"
+return /* make_dirs */
+
+
+get_parms:
+
+   lmdir = "c:\leechmp3"
+   say "Choose a directory to install LEECHMP3 (default" lmdir")"
+   pull answer
+   if answer <> '' then lmdir = answer
+   /* CDDB installation */
+   cddbdir = find_best_disk()"\LM3CDDB"
+   say "Choose a directory for your CDDB folders (default" cddbdir")"
+   pull answer
+   if answer <> '' then cddbdir = answer
+
+   /* Install Z! association */
+   if find_prog("Z.EXE") <> '' then do
+      say "The Z! MP3 player is installed on your system."
+      do while pos(associate, "YN") = 0
+         say "Do you want to associate it to *.MP3 and *.M3U files"
+         say " thru my ZPLAY program (Y/N)?"
+         parse upper pull associate
+      end
+   end
+return /* get_dirs */
+
+
+set_title: procedure
+
+   fname = arg(1)
+   title = arg(2)
+   typeinfo = 'FDFF'x || d2c(length(title)) || '00'x || title
+   call SysPutEA fname, ".LONGNAME", typeinfo
+return /* set_title */
+
+
+find_prog:
+procedure
+
+   /* First, search in the program's directory */
+   parse source . . me .
+   pgm = stream(filespec('d', me) || filespec('p', me) || arg(1), 'c', 'query exist')
+   if pgm = '' then do /* search in the path environment variable */
+      pgm = syssearchpath( 'path', arg(1))
+   end
+return pgm /* find_prog */
+
+
+find_best_disk:
+
+   max = 0
+   dks = find_hpfs()
+   if dks = '' then do
+      call error "No HPFS drive on your system"
+   end
+   do i = 1 to words(dks)
+     idk = word(dks, i)
+      call sysfiletree idk"\lm3cddb\*.*", dir.
+      if dir.0 > 0 then do /* there is already a directory */
+         drop dir.
+         return idk
+      end
+      drop dir.
+      size = word(sysdriveinfo(idk), 2)
+      if size > max then do
+         max = size
+         dk = idk
+      end
+   end
+return dk /* find_best_disk*/
+
+
+find_hpfs: procedure
+
+   dklist = ''
+   disks = sysdrivemap('C:', 'local')
+   do i = 1 to words(disks)
+      disk = word(disks, i)
+      free= word(sysdriveinfo(disk), 2)
+      if (free = '') | (free = 0) then iterate
+      testfile = "this_is_a_test"
+      call lineout testfile, "coucou"
+      if result <> 0 then iterate
+      call lineout testfile
+      call sysfiledelete testfile
+      dklist = dklist disk
+   end
+return strip(dklist)

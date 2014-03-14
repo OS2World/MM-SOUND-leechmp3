@@ -1,0 +1,241 @@
+<HTML>
+<!-- Document e:\lm\leechmp3.html created on Tue Oct 31 22:55:38 2000 -->
+<HEAD>
+<META NAME="generator" CONTENT="HTML Studio 1.50 for OS/2">
+<TITLE>Leechmp3, Version 3.40 documentation</TITLE>
+</HEAD>
+<!-- Body of the HTML document begins -->
+<BODY>
+
+<UL>
+<LI><A HREF="#intro">Introduction</A><BR>
+
+<LI><A HREF="#need">What do I need?</A><BR>
+
+<LI><A HREF="#install">Installation</A><BR>
+
+<LI><A HREF="#loadnew">Load a new record</A><BR>
+
+<LI><A HREF="#myrec">My records</A><BR>
+
+<LI><A HREF="#rebuild">Rebuild playlists</A><BR>
+
+<LI><A HREF="#save">Save My records to CD using CDRECORD/2</A><BR>
+
+<LI><A HREF="#edit">EDIT LEECHMP3 CONFIGURATION FILE</A><BR>
+<LI><A HREF="#tonigy">USING TONIGY TO GRAB TRACKS</A><BR>
+
+<LI>Contact the author:<A HREF="mailto:msuch@free.fr">Michel Such, msuch@free.fr</A><BR>
+</Ul><HR>
+
+
+<P><A NAME="intro">&nbsp;</a>
+<H2>INTRODUCTION</H2>
+
+<B>LEECHMP3</B>
+
+is a set of REXX programs that automates
+the process of converting audio CDs to MP3 files and store them in folders.
+There are 3 folders levels:
+<OL>
+<LI>Category (folk, rock, blues, classical...)
+<LI>Artist (artist name)
+<LI>Record (all the record's tracks)
+</OL>
+The folder are built according to the info found in the <B>CDDB</B> database to
+which the program connects when starting the process.<BR>
+In the record folder, each track is identified by its full name, using OS/2
+extended attributes to mask the real name of the MP3 file.<BR>
+At each folder level, a playlist is built allowing you to hear all the tracks
+that are in thsi folder and its subfolders.<BR>
+
+<P>A utility programs allows you to save all your folders on a CD, which can
+be usefull if you have a portable cd player supporting MP3 format, or such a
+player in your car for example.<HR>
+
+
+<P><A NAME="need">&nbsp;</a>
+<H2>What do I need?</H2>
+
+<B>LEECHMP3</B>
+needs several additional components that are all freeware:
+<OL>
+<LI> You need at least a HPFS formated unit where to store the CD database.
+
+<LI>A CD grabber to read the cd and convert it into WAVE format:<P> I use <B>LEECH</B>
+cause of its excellent dijittering capabilities and of its ease of use. You can
+<A HREF="http://hobbes.nmsu.edu/pub/os2/apps/mmedia/cd/grabber/leech120.zip">download it here</a>
+
+<LI>A MP3 encoder to convert WAV files into MP3 format:<P> I use <B>LAME</B> which
+probably is the best one and runs under OS/2. A version of <B>LAME</B> is
+provided in the package, but you'll need to
+<A HREF="http://hobbes.nmsu.edu/pub/os2/dev/emx/v0.9d/emxrt.zip">download EMXRT</A>
+to have it running. After installing <B>EMXRT</B>, you must install
+<A HREF="http://hobbes.nmsu.edu/pub/os2/dev/emx/v0.9d/emxfix03.zip">EMXFIX03</A>
+to have <B>EMX runtime</B> aht the most appropriate level.
+
+<LI>A <B>CDDB</B> client program to connect to a
+<B>CDDB</B> server and retrieve the CD information:<P>
+The <B>QUERYCDDB</B> program is included in the package, but comes from a very
+nice <B>Chris Wohlgemuths</B> package called
+<B>AUDIO-CD-CREATOR</B> that you can download from
+<A HREF="http://www.geocities.com/SiliconValley/Sector/5785/#es.com/SiliconValley/Sector/5785/#cdrecord"> Chris Wohlgemuths Home Page</A<<BR>
+On his page, you will also find the source code of this nice package and older versions of <B>CDRECORD/2</B>.
+
+<LI>A MP3 player:<P>
+You should use <B>Z!</B> from
+<A HREF="http://www.dink.org">DINK HOMEPAGE</A>
+because the <B>ZPLAY</B> program coming with <B>LEECHMP3</B> uses it to play
+either MP3 files or playlists.
+
+<LI>If you want to transfer your songs database on a CD, you will
+also need to install <B>CDRECORD/2</B>. You can find newest version on
+<A HREF="http://hobbes.nmsu.edu"> HOBBES</A<<BR>
+<B>CDRECORD/2</B> is not so easy to install, so carefully follow instructions.<BR>
+if <B>CDRECORD/2</B> is not installed, the corresponding entry
+in the <B>LEECHMP3</B> folder will not be installed.
+
+</OL><HR>
+
+
+<P><A NAME="install">&nbsp;</a>
+<H2>INSTALLATION</H2>
+
+<OL>
+<LI>Unzip <B>LEECHMP3.ZIP</B> in a temporary directory (if you read
+this, it should already be done).
+
+<LI> <A HREF="http://hobbes.nmsu.edu/pub/os2/apps/mmedia/cd/grabber/leech120.zip">Download</a>
+and unzip <B>LEECH</B> in the same tempo directory.
+
+<LI>Run the <B>INSTALL</B> program.<BR>
+It will ask you directories where to put programs and database.<BR>
+For the CD database, the program automatically
+determines the HPFS unit where you have
+the more free space, you may choose another one.<BR>
+if you have the <B>Z!</B> MP3 player installed,
+the program will ask you if you want to associate it to MPL and
+.MP3 files thru the <B>ZPLAY</B> program that comes with <B>LEECHMP3</B>.
+This program determines if the input file is a .MP3 file or a playlist
+(.MPL file) and passes it to <B>Z!</B> with the appropriate parameters.<BR>
+Note that <B>Z!</B> must be installed in a directory
+figuring in the path variable of your config.sys file.<BR>
+
+<LI>All needed objects should now be created, you only
+have to open the <B>LEECHMP3</B> folder and play.
+</ol><HR>
+
+<P><A NAME="loadnew">&nbsp;</A>
+<H2>Load a new record</H2>
+
+This is the main <B>LEECHMP3</B> program. It will do the following:<P>
+
+Read the <B>CDID</B> from the cd and pass it to
+the CDDB client to retrieve category, artist name and track titles
+from a CDDB server.<BR>
+The CDID is an identificator that should be unique
+for each audio CD, it is  the key for CDDB.
+But the CDDB may be incomplete or contain errors, or you may
+not be connected to internet.<BR>
+If the CDID provided matches several entries in the CDDB, the <B>QUERYCDDB</B>
+program will ask to choose one of them.<BR>
+If nothing is retrieved from CDDB for any reason, <B>LEECHMP3</B>
+will ask you if you want to continue loading the CD.
+If the answer is yes, the CD will be placed in the 'UNTITLED' category
+and the tracks will have no title, but a track number, not very nice!<BR>
+If info is correctly retrived, appropriate folders are created
+and the CD is loaded and converted to MP3.<BR>
+After all this, the playlists are built so that you can hear all your CD
+at once.<HR>
+
+<P><A NAME="myrec">&nbsp;</A>
+<H2>My records</H2>
+
+This is the entry folder where all your record folders are created.<BR>
+Opening it, you will find one folder for each music category.<BR>
+In each category, you will find folders for the artists
+and for each artist, the records you have already loaded.<BR>
+After installation, the <B>MY RECORDS</B> folder is empty.<HR>
+
+<P><A NAME="rebuild">&nbsp;</A>
+<H2>Rebuild playlists<H2>
+
+After you have loaded some records, you may want
+to delete one. You may also find that the category
+in which CDDB placed the artist and record
+is not the one where you would have placed it! (CDDB
+sometimes has strange choices).<BR>
+So you can delete a record, an artist, or move a folder to another place.<BR>
+After this, the already created playliists may point to songs
+that don't exist anymore or that have been moved.<BR>
+Simply double click on the <B>REBUILD PLAYLISTS</B>
+program and the playlists will again be acurate.<HR>
+
+<P><A NAME="save">&nbsp;</A>
+<H2>Save My records to CD using CDRECORD/2</H2>
+
+This function will appear in the <B>LEECHMP3</B> folder
+only if <B>CDRECORD/2</B> was installed at the moment
+when you installed <B>LEECHMP3</B>. Note that <B>CDRECORD.EXE</B> and <B>MKISOFS.EXE</B>, part of the <B>CDRECORD/2</b>
+package must be located in a directory figuring in the path variable
+of your config.sys file.<BR>
+This program will save all the database on a CD. The database must
+not be bigger that the space available on the CD (about 682 MB).<BR>
+On the CD, the tracks' long names won't be preserved, so you will see them
+with there physical filename.<HR>
+
+<p><A NAME="edit">&nbsp;</A>
+<H2>EDIT LEECHMP3 CONFIGURATION FILE</H2>
+
+
+This program allows you to edit the <B>LEECHMP3 CONFIGURATION FILE</B>
+using the system editor.<BR>
+This file allows you to configure the following parameters:
+<UL>
+
+<LI>CDROM letter: The address of your cdrom unit. If not defined, the
+programs try to determine it automatically but it might sometimes fail.<BR>
+
+<LI>CDDB URL AND PORT: This is for the <B>QUERYCDDB</B> program.
+It tells it where to connect to retrieve CDDB information. If not defined
+the default is cddb.cddb.com 8880. You may choose another one.<BR>
+
+<LI>LEECH PARAMETERS:  This allows you to tune LEECH parameters
+to get the best results depending on your system and your cdrom unit.
+The LEECH documentation should be installed in the <B>LEECHMP3</B> folder,
+check at it for more details about those parameters.<BR>
+
+<LI>LAME PARAMETERS: These parameters determines the way
+<B>LAME</B> will encode the files(byte rate, quality...).
+A short LAME HELP is available in the <B>LEECHMP3</B> folder,
+check at it for those parameters. If not defined, <B>LAME</B> uses its default parameters.<BR>
+
+<LI>CD RECORDER SCSI ID: This is for <B>CDRECORD/2</B>.
+To retrieve this info, enter the following command in an OS/2 window:<BR>
+cdrecord -scanbus<BR>
+and find it in the displayed result.<BR>
+If not defined, <B>CDRECORD/2</B> won't work.<BR>
+
+<LI>CD WRITER MAX SPEED: This parameter is also for
+<B>CDRECORD/2</B>. Check it in your writer documentation.
+</UL><HR>
+
+
+<p><A NAME="tonigy">&nbsp;</A>
+<H2>USING TONIGY TO GRAB TRACKS</H2>
+
+     Using <B>TONIGY</B> to grab tracks is
+an interesting alternative to <B>LEECH</B>.<BR>
+Tonigy is a shareware IFS that shows the audio CD as a collection of
+tracks in Wave or Raw format. So, tracks don't need to be first saved on
+the hard disk, then can be directly encoded from the CD, which saves
+space and time.<BR>
+You can download Tonigy from
+<A HREF="http://tonigy.hypermart.net">here</A>. <BR>
+<B>LEECHMP3</B> will first test if a Tonigy drive is attached. If not, it will
+use <B>LEECH</B>.
+So, to use <B>Tonigy</B> to grab, you must first start it and attach a
+drive.<BR>
+
+</BODY>
+</HTML>

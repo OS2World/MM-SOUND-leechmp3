@@ -1,0 +1,65 @@
+Leechmp3: changes in version 3.40, 2001-05-19
+
+New: Leechmp3 can now reimport MP3 CDs that have been saved
+using the "SAVE MY RECORDS TO CD" program.
+This only work with CDs created with LEECHMP3 3.40.
+The imported CD will be merged with you current MY RECORDS folder and
+playlists will be updated.
+
+- Sound files have been replaced by files in mp3 format,
+which means that you need to have Z! installed
+if you want to hear spoken progress messages.
+This makes a smaller package.
+note: if Z! not installed, you'll hear nothing but LEECHMP3
+will work anyway.
+
+- ZPLAY.EXE improved; Starting to play a new
+track stops the one previously playing.
+Double clicking on the currently playing track stops it.
+
+- Extension for the playlist files has been changed
+from .mpl to .M3U to be more standard (especially
+to comply with the extensions accepted by my TERRATEC M3PO machine).
+
+
+Leechmp3: changes in version 3.30, 2001-05-08
+
+- Titles of windows now update so you can know
+what the programs are doing simply looking at the
+window list.
+
+-Added a new program called "VIEW CD TRACKLIST"
+that simply connects to cddb and display content of the cd.
+
+- Cleaned up code of most of the programs.
+
+
+Leechmp3: changes in version 3.20, 2001-05-04
+
+- The installation program now does not perform
+any undesired object deletion!
+
+- Improved behaviour of the COPY2CD program
+(Save My records to CD using CDRECORD/2).
+It now accepts MKISOFS2 and CDRECORD2 coming from
+the CDRTOOLS package found on hobbes.
+
+- Now, each folder is sorted according to the order
+the tracks were in the original CD.
+
+
+Leechmp3: changes in version 3.10, 2001-04-27
+
+- The install program now detects if a previous "MY RECORDS" directory
+exists and, if yes, reuses it.
+
+- Fixed a bug in wave files deletion when using LEECH.
+
+- Improved detection and use of Tonigy (Thanks to rexx
+samples supplied by Tonigy developpment team). This
+might work only with Tonigy 1.10.
+
+- Added some more CDDB servers in the configuration file.
+
+- Included a 3.89 beta Lame version
+that gives much better results at high byte rates

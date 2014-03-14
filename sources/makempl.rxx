@@ -1,0 +1,132 @@
+/********************************************************************/
+/*                                                                  */
+/* MAKEMPL: playlist builder for LEECHMP3 Version 3.40               */
+/* Author: Michel SUCH. Email: msuch@free.fr                        */
+/*                                                                  */
+/********************************************************************/
+
+   call init_prog
+   call get_dirlist
+   dir = directory(basedir)
+   if npl < 2 then
+      text = npl "PLAYLIST CREATED"
+   else
+      text = npl "PLAYLISTS CREATED"
+call pmexit text
+exit
+
+
+init_prog:
+
+   if rxfuncquery('sysloadfuncs') <> 0 then do
+      call rxfuncadd 'sysloadfuncs', 'rexxutil', 'sysloadfuncs'
+      call sysloadfuncs
+   end
+   basedir = directory()
+   npl = 0
+return /* init_prog */
+
+
+get_dirlist:
+
+   call sysfiletree "*.*", lst., "so", "-+--"
+   do i = 1 to lst.0
+      call make_playlist lst.i
+   end
+   call make_playlist basedir
+return /* get_dirlist */
+
+
+make_playlist:
+procedure expose npl
+
+   parse arg dir
+   dir = directory(dir)
+   x = lastpos("\", dir)
+   if x = length(dir) then do /* disk root */
+      playlist = "ROOT.M3U"
+      l = x + 1
+   end
+   else do
+      foldername = get_name(dir)
+      playlist = "00"foldername".M3U"
+      l = length(dir) + 2
+   end
+   call sysfiledelete playlist
+   call sysfiletree "*.MP3", lst., "so"
+   do i = 1 to lst.0
+      call lineout playlist, substr(lst.i, l)
+   end
+   if lst.0 > 0 then do
+      call lineout playlist
+      call set_title playlist, "Listen to all" foldername "tracks"
+      npl = npl + 1
+   end
+return /* make_playlist */
+
+
+get_name: procedure
+
+   parse arg fn
+   rc = sysgetea(fn, ".LONGNAME", eadata)
+   select
+      when rc <> 0 then return ''
+      when length(eadata) = 0 then do
+         x = lastpos("\", fn)
+         return substr(fn, x+1)
+      end
+      otherwise return substr(eadata, 5)
+   end
+return '' /* get_name*/
+
+
+set_title:
+procedure
+
+   fname = directory()"\"arg(1)
+   title = arg(2)
+   typeinfo = 'FDFF'x || d2c(length(title)) || '00'x || title
+   call SysPutEA fname, ".LONGNAME", typeinfo
+return /* set_title */
+
+
+pmexit:
+
+   parse arg msg
+   pmsay = find_prog("PMSAY.EXE")
+   if pmsay <> '' then do
+      wintitle = cur_title()
+      if wintitle = '' then wintitle = "LEECHMP3"
+      "@START /pm" pmsay msg"\\"wintitle"\\ok"
+   end
+   else say msg
+exit /* pmexit */
+
+
+cur_title:
+procedure
+
+   titler = find_prog("LMSETTTL.EXE")
+   if titler = '' then return ''
+
+   /* Setup a local queue to avoid conflicts with other process */
+   ttqueue = rxqueue('create')
+   oldq = rxqueue('set', ttqueue)
+
+   "@"titler "| rxqueue" ttqueue
+   pull title
+   oldq = rxqueue('set', oldq)
+   ttqueue = rxqueue('delete', ttqueue)
+return title /* cur_title */
+
+
+find_prog:
+procedure
+
+   /* First, search in the program's directory */
+   parse source . . me .
+   pgm = stream(filespec('d', me) || filespec('p', me) || arg(1), 'c', 'query exist')
+   if pgm = '' then do /* search in the path environment variable */
+      pgm = syssearchpath( 'path', arg(1))
+   end
+return pgm /* find_prog */

@@ -1,0 +1,133 @@
+/********************************************************************/
+/*                                                                  */
+/* ZPLAY: Version 3.40                                               */
+/* Author: Michel SUCH. Email: msuch@free.fr                        */
+/*                                                                  */
+/* Plays a MP3 or M3U file using Z.EXE mp3 player                   */
+/*                                                                  */
+/* This program requires Z MP3 player                               */
+/* You Can download it at: http://www.dink.org                      */
+/*                                                                  */
+/********************************************************************/
+
+   parse arg fname
+   if fname = '' then call help
+   call init_prog
+   call play_or_stop
+
+   parse upper value(filespec('n', fname)) with title'.'ext
+   ext = strip(ext, 'b', '"')
+   if wordpos(ext, "MP3 M3U") = 0 then do
+      call pmexit "File" fname "has an unsupported extension" ext
+   end
+
+   title = get_name(strip(fname, 'b', '"'))
+   "@start" title "/c z" fname
+exit
+
+
+init_prog:
+
+   if rxfuncquery('sysloadfuncs') <> 0 then do
+      call rxfuncadd 'sysloadfuncs', 'rexxutil', 'sysloadfuncs'
+      call sysloadfuncs
+   end
+   parse source . . pgm .
+   progdir = filespec('D', pgm) || filespec('p', pgm)
+   inifile = progdir || "ZPLAY.INI"
+
+   pmsay = find_prog("PMSAY.EXE")
+   z = find_prog("Z.EXE")
+   if z = '' then do
+      call pmexit "Program Z.exe not found"
+   end
+return /* init_prog */
+
+
+play_or_stop:
+
+   zpipe = "\pipe\zmp3"
+   if lines(inifile) > 0 then do
+      prevfile = linein(inifile)
+   call stream inifile, 'c', 'close'
+      call sysfiledelete inifile
+   end
+
+   if stream(zpipe, "c", "open") <> "READY:" then do /* nothing playing */
+      call lineout inifile, fname
+      call lineout inifile
+      return
+   end
+
+   call lineout zpipe, "*quit" /* stop playing */
+   call stream zpipe, 'c', 'close'
+   if fname = prevfile then exit /* don't play the same track again */
+   call lineout inifile, fname
+   call lineout inifile
+return /* stoper */
+
+
+find_prog:
+procedure expose progdir
+
+   /* First, search in the program's directory */
+   pgm = stream(progdir || arg(1), 'c', 'query exist')
+   if pgm = '' then do /* search in the path environment variable */
+      pgm = syssearchpath( 'path', arg(1))
+   end
+return pgm /* find_prog */
+
+
+help:
+
+   say "Syntax: ZPLAY [FILE.MP3] [FILE.M3U]"
+   say ''
+   say "This program invokes Z.EXE MP3 player"
+   say "with appropriate parameters depending if the file"
+   say "is a mp3 file (.MP3) or a playlist (.M3U)"
+exit
+
+
+get_name: procedure
+
+   parse arg fn
+   rc = sysgetea(fn, ".LONGNAME", eadata)
+   select
+      when rc <> 0 then return ''
+      when length(eadata) = 0 then do
+         fn = strip(fn, 'b', '"')
+         x = lastpos("\",fn)
+         return '"'substr(fn, x+1)'"'
+      end
+      otherwise return '"'substr(eadata, 5)'"'
+   end
+return '' /* get_name*/
+
+
+pmexit:
+
+   parse arg msg
+   if pmsay <> '' then do
+      wintitle = cur_title()
+      if wintitle = '' then wintitle = "LEECHMP3"
+      "@START /pm" pmsay msg"\\"wintitle"\\ok"
+   end
+   else say msg
+exit /* pmexit */
+
+
+cur_title:
+procedure
+
+   titler = find_prog("LMSETTTL.EXE")
+   if titler = '' then return ''
+
+   /* Setup a local queue to avoid conflicts with other process */
+   ttqueue = rxqueue('create')
+   oldq = rxqueue('set', ttqueue)
+
+   "@"titler "| rxqueue" ttqueue
+   pull title
+   oldq = rxqueue('set', oldq)
+   ttqueue = rxqueue('delete', ttqueue)
+return title /* cur_title */

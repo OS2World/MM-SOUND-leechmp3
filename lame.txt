@@ -1,0 +1,132 @@
+   The following text is what you could obtain by typing the command:
+LAME --longhelp
+These parameters can be used in the LEECHMP3.CFGfile
+in the lameparms area
+
+-------------------------
+
+LAME version 3.89 (alpha 1, Apr 26 2001 08:15:05) (http://www.mp3dev.org/)
+
+usage: lame [options] <infile> [outfile]
+
+    <infile> and/or <outfile> can be "-", which means stdin/stdout.
+
+RECOMMENDED:
+    lame -h input.wav output.mp3
+
+OPTIONS:
+  Input options:
+    -r              input is raw pcm
+    -x              force byte-swapping of input
+    -s sfreq        sampling frequency of input file (kHz) - default 44.1 kHz
+    --mp1input      input file is a MPEG Layer I   file
+    --mp2input      input file is a MPEG Layer II  file
+    --mp3input      input file is a MPEG Layer III file
+    --ogginput      input file is a Ogg Vorbis file
+
+  Operational options:
+    -m <mode>       (s)tereo, (j)oint, (f)orce, (m)ono or (a)auto
+                    default is (s) or (j) depending on bitrate
+                    force = force ms_stereo on all frames.
+                    auto = jstereo, with varialbe mid/side threshold
+    -a              downmix from stereo to mono file for mono encoding
+    -d              allow channels to have different blocktypes
+    --disptime <arg>print progress report every arg seconds
+    --ogg           encode to Ogg Vorbis instead of MP3
+    --freeformat    produce a free format bitstream
+    --decode        input=mp3 file, output=wav
+    -t              disable writing wav header when using --decode
+    --comp  <arg>   choose bitrate to achive a compression ratio of <arg>
+    --scale <arg>   scale input (multiply PCM data) by <arg>
+    --athonly       only use the ATH for masking
+    --noath         disable the ATH for masking
+    --athlower x    lower the ATH x dB
+    --notemp        disable temporal masking effect
+    --short         use short blocks
+    --noshort       do not use short blocks
+    --voice         experimental voice mode
+    --preset type   type must be phone, voice, fm, tape, hifi, cd or studio
+                    "--preset help" gives some more infos on these
+
+  Verbosity:
+    -S              don't print progress report, VBR histograms
+    --silent        don't print anything on screen
+    --quiet         don't print anything on screen
+    --verbose       print a lot of useful information, default
+
+  Noise shaping & psycho acoustic algorithms:
+    -q <arg>        <arg> = 0...9.  Default  -q 5
+                    -q 0:  Highest quality, very slow
+                    -q 9:  Poor quality, but fast
+    -h              Same as -q 2.   Recommended.
+    -f              Same as -q 7.   Fast, ok quality
+
+
+  CBR (constant bitrate, the default) options:
+    -b <bitrate>    set the bitrate in kbps, default 128 kbps
+
+  ABR options:
+    --abr <bitrate> specify average bitrate desired (instead of quality)
+
+  VBR options:
+    -v              use variable bitrate (VBR) (--vbr-old)
+    --vbr-old       use old variable bitrate (VBR) routine
+    --vbr-new       use new variable bitrate (VBR) routine
+    --vbr-mtrh      a merger of old and new (VBR) routine
+    -V n            quality setting for VBR.  default n=4
+                    0=high quality,bigger files. 9=smaller files
+    -b <bitrate>    specify minimum allowed bitrate, default  32 kbps
+    -B <bitrate>    specify maximum allowed bitrate, default 320 kbps
+    -F              strictly enforce the -b option, for use with players that
+                    do not support low bitrate mp3 (Apex AD600-A DVD/mp3 player)
+    -t              disable writing Xing VBR informational tag
+    --nohist        disable VBR histogram display
+
+  MP3 header/stream options:
+    -e <emp>        de-emphasis n/5/c  (obsolete)
+    -c              mark as copyright
+    -o              mark as non-original
+    -p              error protection.  adds 16 bit checksum to every frame
+                    (the checksum is computed correctly)
+    --nores         disable the bit reservoir
+    --strictly-enforce-ISO   comply as much as possible to ISO MPEG spec
+
+  Filter options:
+    -k              keep ALL frequencies (disables all filters),
+                    Can cause ringing and twinkling
+  --lowpass <freq>        frequency(kHz), lowpass filter cutoff above freq
+  --lowpass-width <freq>  frequency(kHz) - default 15% of lowpass freq
+  --highpass <freq>       frequency(kHz), highpass filter cutoff below freq
+  --highpass-width <freq> frequency(kHz) - default 15% of highpass freq
+  --resample <sfreq>  sampling frequency of output file(kHz)- default=automatic
+  --cwlimit <freq>    compute tonality up to freq (in kHz) default 8.8717
+
+  ID3 tag options:
+    --tt <title>    audio/song title (max 30 chars for version 1 tag)
+    --ta <artist>   audio/song artist (max 30 chars for version 1 tag)
+    --tl <album>    audio/song album (max 30 chars for version 1 tag)
+    --ty <year>     audio/song year of issue (1 to 9999)
+    --tc <comment>  user-defined text (max 30 chars for v1 tag, 28 for v1.1)
+    --tn <track>    audio/song track number (1 to 255, creates v1.1 tag)
+    --tg <genre>    audio/song genre (name or number in list)
+    --add-id3v2     force addition of version 2 tag
+    --id3v1-only    add only a version 1 tag
+    --id3v2-only    add only a version 2 tag
+    --space-id3v1   pad version 1 tag with spaces instead of nulls
+    --pad-id3v2     pad version 2 tag with extra 128 bytes
+    --genre-list    print alphabetically sorted ID3 genre list and exit
+
+    Note: A version 2 tag will NOT be added unless one of the input fields
+    won't fit in a version 1 tag (e.g. the title string is longer than 30
+    characters), or the '--add-id3v2' or '--id3v2-only' options are used,
+    or output is redirected to stdout.
+
+
+MPEG-1   layer III sample frequencies (kHz):  32  48  44.1
+bitrates (kbps): 32 40 48 56 64 80 96 112 128 160 192 224 256 320
+
+MPEG-2   layer III sample frequencies (kHz):  16  24  22.05
+bitrates (kbps):  8 16 24 32 40 48 56 64 80 96 112 128 144 160
+
+MPEG-2.5 layer III sample frequencies (kHz):   8  12  11.025
+bitrates (kbps):  8 16 24 32 40 48 56 64 80 96 112 128 144 160

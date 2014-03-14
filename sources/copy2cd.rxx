@@ -1,0 +1,312 @@
+/********************************************************************/
+/*                                                                  */
+/* LEECHMP3, COPY2CD: Version 3.40                                   */
+/* Author: Michel SUCH. Email: msuch@free.fr                        */
+/*                                                                  */
+/* Copy LEECHMP3 "MY RECORDS" folder to CD                          */
+/* using CDRECORD and MKISOFS.                                      */
+/*                                                                  */
+/* This program requires CDRECORD/2 installed on your machine       */
+/*                                                                  */
+/* CDRECORD/2 can be obtained on HOBBES: http://hobbes.nmsu.edu     */
+/*                                                                  */
+/* CDRECORD.EXE and MKISOFS.EXE must be located in a directory      */
+/* defined in the path variable of the CONFIG.SYS file              */
+/* or in the directory containing the LEECHMP3 program.             */
+/********************************************************************/
+
+   parse arg base .
+   call presentation
+   call init_prog
+   call continue_y_n "Insert a blank CD in your CD writer"
+call rebuild_playlists /* make sure they are up to date */
+   call save_titles
+   call perform_copy
+   call sysfiledelete tracklist
+   call pmexit "CD recorded successfuly."
+exit
+
+
+presentation:
+
+   say "COPY2CD Version 3.40"
+   say "Author: Michel SUCH, Email: msuch@free.fr"
+   say ""
+return /* presentation */
+
+
+init_prog:
+
+/*------------------- Init Rexxutil-----------------------------------*/
+   If RXFUNCQUERY('SysLoadFuncs') Then Do
+      Call rxfuncadd 'SysLoadFuncs', 'REXXUTIL', 'SYSLOADFUNCS'
+      Call sysloadfuncs
+   End
+
+   /* Check if we have all appropriate programs */
+   pmsay = find_prog("PMSAY.EXE")
+   diskreader  = find_prog("MKISOFS.EXE")
+   if diskreader = '' then
+      diskreader  = find_prog("MKISOFS2.EXE")
+   if diskreader  = '' then do
+      call pmexit "Cannot find program MKISOFS.EXE or MKISOFS2.EXE"
+   end
+
+   writer = find_prog("CDRECORD.EXE")
+   if writer = '' then
+      writer = find_prog("CDRECORD2.EXE")
+   if writer = '' then do
+      call pmexit "Cannot find program CDRECORD.EXE or CDRECORD2.EXE"
+   end
+
+   parse source . . progname .
+   progdir = filespec('d', progname) || filespec('p', progname)
+   startdir = directory()
+   if base = '' then base = startdir
+   else do
+      dir = directory(base)
+      if dir = '' then do
+         call pmexit "Directory" base "does not exist"
+      end
+   end
+   basefile = translate(base, '/', '\')
+   tracklist = base"\TRACKS.LST"
+   playlist = base"\00MY RECORDS.M3U"
+
+   call readcfg
+return /* init_prog */
+
+
+continue_y_n:
+
+   parse arg msg
+   if pmsay = '' then do
+      do while pos(rep, "YN") = 0
+         call beep 400,150
+         say msg", Do you want to continue? (Y/N) "
+         rep = translate(sysgetkey())
+         say
+      end
+      if rep = 'N' then exit
+   end
+   else do
+      wintitle = cur_title()
+      if wintitle = '' then wintitle = "LEECHMP3"
+      "@"pmsay msg "\\"wintitle"\\OKCANCEL"
+      if rc = 2 then exit
+   end
+return /* continue_y_n */
+
+
+perform_copy:
+
+   "@"diskreader  "-f -pad -quiet --notitle -l -L",
+   "-V" '"LEECHMP3DSC"' "-J -jcharset" get_codepage() basefile,
+   "|" writer  "dev="outdev "speed="maxspeed "-v -eject -pad -waiti -data",
+   get_tsize(basefile) "-"
+   select
+      when rc = 0 then nop
+      when rc = 2 then do
+         call pmexit "Error trying to write on CD"
+      end
+      when rc = 255 then do
+         call pmexit "CD writer not ready"
+      end
+      otherwise do
+         call pmexit "Error reading files rc="rc
+      end
+   end
+return /* perform_copy */
+
+
+get_codepage: procedure
+
+   /* Setup a local queue to avoid conflicts with other process */
+   cpqueue = rxqueue('create')
+   oldq = rxqueue('set', cpqueue)
+
+   "@chcp 2>nul | rxqueue" cpqueue
+   pull cp
+   do queued()
+      pull .
+   end
+   oldq = rxqueue('set', oldq)
+   cpqueue = rxqueue('delete', cpqueue)
+return "cp" || word(cp, words(cp)) /* get_codepage */
+
+
+get_tsize:
+procedure expose diskreader
+
+   parse arg basefile
+   /* Setup a local queue to avoid conflicts with other process */
+   tsqueue = rxqueue('create')
+   oldq = rxqueue('set', tsqueue)
+
+   "@"diskreader "-f -quiet --notitle -l -L -pad -print-size -J" basefile "2>nul | rxqueue" tsqueue
+   do queued()
+      pull tsize
+   end
+   oldq = rxqueue('set', oldq)
+   tsqueue = rxqueue('delete', tsqueue)
+return "-tsize="tsize"s" /* get_tsize */
+
+
+find_prog:
+procedure
+
+   /* First, search in the program's directory */
+   parse source . . me .
+   pgm = stream(filespec('d', me) || filespec('p', me) || arg(1), 'c', 'query exist')
+   if pgm = '' then do /* search in the path environment variable */
+      pgm = syssearchpath( 'path', arg(1))
+   end
+return pgm /* find_prog */
+
+
+readcfg:
+
+   parse value('') with outdev maxspeed
+   config = progdir'LEECHMP3.cfg'
+   do while lines(config) > 0
+      line = translate(linein(config))
+      parse var line cmd';'comment
+      cmd = strip(cmd)
+      if cmd = '' then iterate
+      parse var cmd keyword'='value
+      value = strip(value)
+      keyword = strip(keyword)
+      select
+         when keyword = 'CD-R' then do
+            outdev = value
+         end
+         when keyword = 'SPEED' then do
+            maxspeed = value
+         end
+         otherwise nop
+      end
+   end
+   call stream config, 'c', 'close'
+   if maxspeed = '' then
+      call pmexit "No speed defined for the writer in file" config
+   if outdev = '' then
+      call pmexit "No SCSI id defined for the CD writer in file" config
+return /* readcfg */
+
+
+pmexit:
+
+   parse arg msg
+   if pmsay <> '' then do
+      wintitle = cur_title()
+      if wintitle = '' then wintitle = "LEECHMP3"
+      "@START /pm" pmsay msg"\\"wintitle"\\ok"
+   end
+   else say msg
+   dir = directory(startdir)
+exit /* pmexit */
+
+
+cur_title:
+procedure
+
+   titler = find_prog("LMSETTTL.EXE")
+   if titler = '' then return '' /* program lmsetttl.exe not found */
+
+   /* Setup a local queue to avoid conflicts with other process */
+   ttqueue = rxqueue('create')
+   oldq = rxqueue('set', ttqueue)
+
+   "@"titler "| rxqueue" ttqueue
+   pull title
+   oldq = rxqueue('set', oldq)
+   ttqueue = rxqueue('delete', ttqueue)
+return title /* cur_title */
+
+
+ok_cancel:
+
+   call beep 220, 100
+   say "Insert a blank CD in the CD-R unit for copy" n
+   say "press enter to cuntinue,"
+   say "any other key to cancel."
+   if c2d(sysgetkey('noecho')) <> 13 then do
+      say "Program aborted by user"
+      exit 1
+   end
+return /* ok_cancel */
+
+
+rebuild_playlists:
+
+   call sysfiletree "*.*", lst., "so", "-+--"
+   do i = 1 to lst.0
+      call make_playlist lst.i
+   end
+   call make_playlist base
+return /* rebuild_playlists */
+
+
+make_playlist:
+procedure
+
+   parse arg dir
+   dir = directory(dir)
+   x = lastpos("\", dir)
+   if x = length(dir) then do /* disk root */
+      playlist = "ROOT.M3U"
+      l = x + 1
+   end
+   else do
+      foldername = get_name(dir)
+      playlist = "00"foldername".M3U"
+      l = length(dir) + 2
+   end
+   call sysfiledelete playlist
+   call sysfiletree "*.MP3", lst., "so"
+   do i = 1 to lst.0
+      call lineout playlist, substr(lst.i, l)
+   end
+   if lst.0 > 0 then do
+      call lineout playlist
+      call set_title playlist, "Listen to all" foldername "tracks"
+   end
+return /* make_playlist */
+
+
+save_titles:
+
+   if stream(playlist, 'c', 'query exist') = '' then return /* no base playlist */
+   call sysfiledelete tracklist
+   do while lines(playlist) <> 0
+      track = linein(playlist)
+      call lineout tracklist, get_name(track)
+   end
+   call stream playlist, 'c', 'close'
+   call lineout tracklist
+return /* save_titles */
+
+
+get_name: procedure
+
+   parse arg fn
+   rc = sysgetea(fn, ".LONGNAME", eadata)
+   select
+      when rc <> 0 then return ''
+      when length(eadata) = 0 then do
+         x = lastpos("\", fn)
+         return substr(fn, x+1)
+      end
+      otherwise return substr(eadata, 5)
+   end
+return '' /* get_name*/
+
+
+set_title:
+procedure
+
+   fname = directory()"\"arg(1)
+   title = arg(2)
+   typeinfo = 'FDFF'x || d2c(length(title)) || '00'x || title
+   call SysPutEA fname, ".LONGNAME", typeinfo
+return /* set_title */

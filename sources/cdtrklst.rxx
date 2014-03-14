@@ -1,0 +1,286 @@
+/********************************************************************/
+/*                                                                  */
+/* CDTRKLST: Version 3.40                                           */
+/* Author: Michel SUCH. Email: msuch@free.fr                        */
+/*                                                                  */
+/* View content of an audio cd via LEECH and CDDB.                  */
+/*                                                                  */
+/* This program is part of the LEECHMP3 package                     */
+/* It uses the following components:                                */
+/* - QUERYCDDB.EXE to access the CDDB database;                     */
+/* - LEECH to retrieve time information from the cd;                */
+/* - the LEECHMP3.CFG file to get the address of the cdrom drive.   */
+/*                                                                  */
+/********************************************************************/
+
+   call init_prog
+   call presentation
+   call read_ini
+   call get_progs
+   call get_cdrom
+   call get_cddb
+   call get_times
+   call merge_lists
+   call display_result
+exit
+
+
+init_prog:
+
+   if rxfuncquery('sysloadfuncs') <> 0 then do
+      call rxfuncadd 'sysloadfuncs', 'rexxutil', 'sysloadfuncs'
+      call sysloadfuncs
+   end
+
+   parse source . . pgm .
+   progdir = filespec('D', pgm) || filespec('p', pgm)
+   inifile = progdir || "LEECHMP3.CFG"
+   cdrom = ''
+   x = systextscreensize()
+   maxlines = word(x, 1)
+return /* init_prog */
+
+
+pmexit:
+
+   parse arg msg
+   if pmsay <> '' then do
+      wintitle = cur_title()
+      if wintitle = '' then wintitle = "LEECHMP3"
+      "@START /pm" pmsay msg"\\"wintitle"\\ok"
+   end
+   else say msg
+exit /* pmexit */
+
+
+cur_title:
+procedure
+
+   titler = find_prog("LMSETTTL.EXE")
+   if titler = '' then return ''
+
+   /* Setup a local queue to avoid conflicts with other process */
+   ttqueue = rxqueue('create')
+   oldq = rxqueue('set', ttqueue)
+
+   "@"titler "| rxqueue" ttqueue
+   pull title
+   oldq = rxqueue('set', oldq)
+   ttqueue = rxqueue('delete', ttqueue)
+return title /* cur_title */
+
+
+presentation:
+
+   parse value(filespec('n', pgm)) with me'.'ext
+   call write me": view CD track list, Version 3.40"
+   call write
+   call write "Author: Michel SUCH. Email: msuch@free.fr"
+   call write
+return /* presentation */
+
+
+read_ini:
+
+   /* Define default values */
+   cdrom = ''
+   cddb = 'freedb.freedb.org' /* default url */
+   port = '888' /* port for the default cddb url */
+
+   do while lines(inifile) <> 0
+      ln = strip(linein(inifile))
+      parse var ln ln';'.
+      if ln = '' then iterate
+      parse var ln keyword'='val
+      keyword = strip(translate(keyword))
+      select
+         when keyword = "CDROM" then do
+            cdrom = strip(translate(val))
+         end
+         when keyword = "CDDB" then do
+            cddb = strip(val)
+            parse var cddb cddb port
+         end
+         otherwise nop
+      end
+   end
+   call stream inifile, 'c', 'close'
+return /* read_ini */
+
+
+find_prog:
+procedure
+
+   /* First, search in the program's directory */
+   parse source . . me .
+   pgm = stream(filespec('d', me) || filespec('p', me) || arg(1), 'c', 'query exist')
+   if pgm = '' then do /* search in the path environment variable */
+      pgm = syssearchpath( 'path', arg(1))
+   end
+return pgm /* find_prog */
+
+
+get_cdrom:
+
+   /* Determine the unit letter for the CD-ROM */
+   if cdrom <> '' then return
+
+   list = sysdrivemap('c', 'local')
+   do i = 1 to words(list)
+      dk = word(list, i)
+      free = word(sysdriveinfo(dk), 2)
+      if (free = '') | (free = 0) then do
+         cdrom = dk
+         leave
+      end
+   end
+   if cdrom = '' then do
+      call pmexit "Cannot determine your CD-ROM drive letter"
+   end
+   call write "CD-ROM unit:" cdrom
+return /* get_cdrom */
+
+
+get_progs:
+   /* Check if we have all needed programs */
+   pmsay = find_prog("PMSAY.EXE")
+   grabber = find_prog('LEECH.EXE')
+   if grabber = '' then do
+      call pmexit "Cannot find LEECH.EXE grabber program"
+   end
+
+   getdb = find_prog("querycddb.exe")
+   if getdb = '' then do
+      call pmexit "Cannot find program QUERYCDDB.EXE, no CDDB access"
+   end
+return /* get_progs */
+
+
+get_cddb:
+procedure expose getdb cdrom pmsay cddb port maxlines dblst. category artist title
+
+   i = 0
+   cddbq = rxqueue('create')
+   oldq = rxqueue('set', cddbq)
+   codepage = get_codepage()
+   call write "Connecting to CDDB" cddb":"port
+   "@"getdb cdrom "leechmp3 anonymous" cddb port "| rxqueue" cddbq
+   call sysfiledelete "cddb.out"
+   if queued() = 0 then do
+      rc = rxqueue('set,', oldq)
+      rc = rxqueue('delete', cddbq)
+      call pmexit "No CDDB connection or cd has no CDDB-ID"
+   end
+
+   do queued()
+      pull q
+      if codepage = 850 then q = translate(q, "AÉÖÑàâÇáäåãìîóñÅ", "¿‚‡‰ÍÎÈÁËÓÔÙˆ˘˚¸") /* To get correct french character set */
+      select
+         when word(q, 1) = "CATEGORY:" then category = q
+         when word(q, 1) = "ARTIST:" then artist = q
+         when word(q, 1) = "TITLE:" then title = q
+         when substr(q, 1, 5) = "TRACK" then do
+            i = i + 1
+            dblst.i = q
+         end
+         otherwise nop
+      end
+   end
+   dblst.0 = i
+   rc = rxqueue('set,', oldq)
+   rc = rxqueue('delete', cddbq)
+return /* get_cddb */
+
+
+get_times:
+procedure expose cdrom grabber maxlines cdlst. totaltime
+
+   call write
+   call write "Searching tracks duration on CD"
+   /* Determines the duration of audio tracks on the cd */
+   i = 0
+
+   /* make a local queue to prevent conflicts with other process */
+   qtrk = rxqueue('create')
+   oldq = rxqueue('set', qtrk)
+   "@"grabber cdrom "TOC | rxqueue" qtrk
+   do queued()
+      pull ln
+
+      select
+         when word(ln, 2) = "PANIC" then do
+            rc = rxqueue('set,', oldq)
+            rc = rxqueue('delete', qtrk)
+            call pmexit "Drive" cdrom "not ready or in use"
+         end
+         when wordpos("CDDA", ln) <> 0 then do /* audio track found */
+           i = i + 1
+           cdlst.i = word(ln, 3)
+           totaltime = word(ln, 2)
+         end
+         otherwise iterate
+      end /* select */
+   end
+   rc = rxqueue('set,', oldq)
+   rc = rxqueue('delete', qtrk)
+   cdlst.0 = i
+   parse var totaltime rest'-'totaltime
+return /* get_times */
+
+merge_lists:
+procedure expose pmsay dblst. cdlst. totaltime
+
+   if cdlst.0 <> dblst.0 then do
+      call pmexit "The number of tracks on CD does not match CDDB"
+   end
+   do i = 1 to dblst.0
+      dblst.i = left(dblst.i, 40, ' ') || cdlst.i
+   end
+   i = cdlst.0 + 1
+   dblst.i = left("Total duration:", 40, ' ') || totaltime
+   dblst.0 = i
+return /* merge_lists */
+
+
+display_result:
+
+   if dblst.0 = 0 then do
+      call pmexit "Sorry: no information retrieved for this CD"
+   end
+   call write category
+   call write artist
+   call write title
+   call write
+   call write left("track list:", 40, " ") || "Duration"
+   do i = 1 to dblst.0
+      call write dblst.i
+   end
+   if word(syscurpos(), 1) <> 1 then do
+      say "Press any key to resume"
+      c = sysgetkey('noecho')
+   end
+return /* display_result */
+
+
+write:
+procedure expose maxlines
+
+   parse arg txt
+   if word(syscurpos(), 1) + 2 = maxlines then do
+      call beep 220, 50
+      say "Press any key to continue"
+      x = sysgetkey('noecho')
+      call syscls
+   end
+   say txt
+return /* write */
+
+
+get_codepage:
+
+   "@chcp | rxqueue" cddbq "2>nul"
+   pull cp
+   do queued()
+      pull .
+   end
+return word(cp, words(cp)) /* get_codepage */

@@ -1,0 +1,1032 @@
+/********************************************************************/
+/*                                                                  */
+/* LEECHMP3: Version 3.40                                           */
+/* Author: Michel SUCH. Email: msuch@free.fr                        */
+/*                                                                  */
+/* Multithreaded conversion from CD to MP3.                         */
+/*                                                                  */
+/* This program requires several components to be installed         */
+/*                                                                  */
+/* 1: LEECH 1.20  or Tonigy 1.0                                     */
+/* 2: LAME MP3 encoder.                                             */
+/* All components may be obtained on HOBBES: http://hobbes.nmsu.edu */
+/*                                                                  */
+/* LEECH.EXE and LAME.EXE must be located in a directory defined    */
+/* in the path variable of the CONFIG.SYS file                      */
+/* or in the directory containing the LEECHMP3 program.             */
+/*                                                                  */
+/* If using Tonigy, Tonigy must be started                          */
+/* and a Tonigy drive must be attached.                             */
+/********************************************************************/
+
+   parse arg parms
+   call init_prog
+   x= pos('-', parms)
+   if x > 0 then do
+      lameparms = substr(parms, x)
+      parms = delstr(parms, x)
+   end
+   else lameparms = ''
+   parse upper value(strip(parms)) with process parms
+   select
+      when process = '' | process = "T" then do /* initial process */
+         call presentation
+         call read_ini
+         call get_cdrom
+
+         /* Check if we have all needed programs */
+         tonigy = find_tonigy(cdrom)
+         if tonigy = '' then do
+            grabber = find_prog('LEECH.EXE')
+            if grabber = '' then do
+               call pmexit "Cannot find LEECH.EXE grabber program"
+            end
+            say "Grabbing using" grabber
+         end
+         else say "Grabbing using Tonigy"
+
+         encoder = find_prog('LAME.EXE')
+         if encoder = '' then do
+            call pmexit "Cannot find LAME.EXE encoding program"
+         end
+         say "Encoding using" encoder
+
+
+         if translate(process) = "T" then do /* tracklist */
+         call check_list
+         end
+         else tracks = "" /* all tracks */
+         if tonigy = '' then do
+            call get_ntracks
+            call sort_trks
+         end
+         else do
+            call get_tonigy_tracks
+         end
+
+         rc = syssetobjectdata(global.rundir, "DEFAULTSORT=5;ALWAYSSORT=YES")
+         call opendir category
+         if titles.0 > 0 then do
+            ta = strip(left(artist, 30, ' '))
+            tl = strip(left(album, 30, ' '))
+            lameparms = lameparms "--ta" '"'ta'"' "--tl" '"'tl'"'
+            call opendir artist
+            if album = '' then album = get_cddir()
+            cddir = album
+         end
+         else do /* no CDDB */
+            cddir = get_cddir()
+            album = cddir
+         end
+         call opendir cddir
+         call cleanup
+         say "Tracks will be created in directory" directory()
+         call sysfiledelete titfile
+         call lineout titfile, global.rundir
+         call lineout titfile
+         if tonigy = '' then '@START "LEECHMP3/ GRABBING' album'" /C /min /b' pgm "GRAB" grabber encoder cdrom wavqueue lameparms
+         else call lame_tonigy
+         rep = directory(global.rundir)
+         if artist = '' then
+            call pmexit "loading" category":" cddir
+         else
+         call pmexit "loading" artist":" cddir
+      end /* initial process */
+
+      when process = "GRAB" then do /* start grabbing process */
+         parse var parms grabber encoder cdrom wavqueue
+         call get_leechparms
+         call start_lame
+         call leech
+         call end_cd
+      end /* start grabbing process */
+
+      when process = "ENCODE" then  do /* start mp3 encoding process */
+         parse var parms encoder qname
+         call lame
+         call end_mp3
+      end /* start mp3 encoding process */
+      when process = "IMPORT" then do
+         cdrom = parms
+         call import_cd
+      end /* import process */
+
+      otherwise do /* should never happen! */
+         call pmexit "invalid parameter" process
+      end
+   end
+exit
+
+pmexit:
+procedure expose global.
+
+   parse arg msg
+   if global.pmsay <> '' then do
+      wintitle = cur_title()
+      "@START /pm" global.pmsay msg"\\"wintitle"\\ok"
+   end
+   else say msg
+exit /* pmexit */
+
+
+cur_title:
+procedure expose global.
+
+   if global.titler = '' then return 'LEECHMP3'
+
+   /* Setup a local queue to avoid conflicts with other process */
+   ttqueue = rxqueue('create')
+   oldq = rxqueue('set', ttqueue)
+
+   "@"global.titler "| rxqueue" ttqueue
+   pull title
+   oldq = rxqueue('set', oldq)
+   ttqueue = rxqueue('delete', ttqueue)
+return title /* cur_title */
+
+
+init_prog:
+
+   if rxfuncquery('sysloadfuncs') <> 0 then do
+      call rxfuncadd 'sysloadfuncs', 'rexxutil', 'sysloadfuncs'
+      call sysloadfuncs
+   end
+   TonigyPipe="\PIPE\TONIGY\CONTROL"
+   parse source . . pgm .
+   global.progdir = filespec('D', pgm) || filespec('p', pgm)
+   global.player = find_prog("Z.EXE")
+   global.rundir = directory()
+   inifile = global.progdir || "LEECHMP3.CFG"
+   titfile = global.progdir || "PLAYLIST.INI"
+   global.pmsay = find_prog("PMSAY.EXE")
+   global.titler = find_prog("LMSETTTL.EXE")
+return /* init_prog */
+
+
+find_prog:
+procedure expose global.
+
+   /* First, search in the program's directory */
+   pgm = stream(global.progdir || arg(1), 'c', 'query exist')
+   if pgm = '' then do /* search in the path environment variable */
+      pgm = syssearchpath( 'path', arg(1))
+   end
+return pgm /* find_prog */
+
+
+change_title:
+procedure expose global.
+
+   parse arg txt
+   if global.titler <> '' then "@"global.titler '"'txt'" >nul'
+return /* change_title */
+
+
+presentation:
+
+   parse value(filespec('n', pgm)) with me'.'ext
+   say me": Multithreaded CD to MP3, Version 3.40"
+   say ""
+   say "Author: Michel SUCH. Email: msuch@free.fr"
+   say ""
+return /* presentation */
+
+
+cleanup: procedure
+
+   call sysfiletree "*.*", lst., "o"
+   do i = 1 to lst.0
+      call sysfiledelete lst.i
+   end
+   drop lst.
+return /* cleanup */
+
+
+read_ini:
+
+   /* Define default values */
+   cdrom = ''
+   cddb = 'freedb.freedb.org' /* default url */
+   port = '888' /* port for the default cddb url */
+
+   do while lines(inifile) <> 0
+      ln = strip(linein(inifile))
+      parse var ln ln';'.
+      if ln = '' then iterate
+      parse var ln keyword'='val
+      keyword = strip(translate(keyword))
+      select
+         when keyword = "CDROM" then do
+            cdrom = strip(translate(val))
+         end
+         when keyword = "CDDB" then do
+            cddb = strip(val)
+            parse var cddb cddb port
+         end
+         when keyword = "LAMEPARMS" then do
+            if lameparms = '' then do
+               lameparms = strip(val)
+            end
+         end
+         otherwise nop
+      end
+   end
+   call stream inifile, 'c', 'close'
+return /* read_ini */
+
+
+get_cdrom:
+
+   /* Determine the unit letter for the CD-ROM */
+   if cdrom <> '' then return
+
+   list = sysdrivemap('c', 'local')
+   do i = 1 to words(list)
+      dk = word(list, i)
+      free = word(sysdriveinfo(dk), 2)
+      if (free = '') | (free = 0) then do
+         cdrom = dk
+         leave
+      end
+   end
+   if cdrom = '' then do
+      call pmexit "Cannot determine your CD-ROM drive letter"
+   end
+   say "CD-ROM unit:" cdrom
+return /* get_cdrom */
+
+
+continue_y_n:
+procedure expose global.
+
+   parse arg msg
+   if global.pmsay = '' then do
+      do while pos(rep, "YN") = 0
+         call beep 400,150
+         say msg", Do you want to continue? (Y/N) "
+         rep = translate(sysgetkey())
+         say
+      end
+      if rep = 'N' then exit
+   end
+   else do
+      wintitle = cur_title()
+      "@"global.pmsay msg", Do you want to continue?\\"wintitle"\\OKCANCEL"
+      if rc = 2 then exit
+   end
+return /* continue_y_n */
+
+
+check_list:
+procedure expose parms tracks
+
+   /* checks that all track numbers are numeric */
+   /* and they are between 1 and 99 */
+
+   if parms = '' then do
+      say "No track list specified"
+      exit
+   end
+   tracks = ''
+   do i = 1 to words(parms)
+      trk = strip(word(parms, i), 'l', '0')
+      if datatype(trk) <> 'NUM' then do
+         say "INVALID TRACK NUMBER" trk
+         exit
+      end
+      if trk < 1 | trk > 99 then do
+         say "Track number" trk "out of range"
+         exit
+      end
+      tracks = tracks trk
+   end
+return /* check_list */
+
+
+get_ntracks:
+procedure expose grabber cdrom trks trklst. tracks global. titles.,
+category artist album cddb port inifile disktype pgm
+
+   /* Determines the number of audio tracks on the cd */
+   trks = 0
+
+   /* make a local queue to prevent conflicts with other process */
+   qtrk = rxqueue('create')
+   oldq = rxqueue('set', qtrk)
+   "@"grabber cdrom "TOC | rxqueue" qtrk
+   total = 0
+   do queued()
+      pull ln
+
+      if word(ln, 2) = "PANIC" then do
+         rc = rxqueue('set,', oldq)
+         rc = rxqueue('delete', qtrk)
+         call sayfile "notready"
+         call pmexit "Drive" cdrom "not ready or in use"
+      end
+
+      if wordpos("CDDA", ln) <> 0 then do /* audio track found */
+         n = strip(word(ln, 1), 'l', '0') /* track number */
+         total = total + 1
+         if (tracks = "") | (wordpos(n, tracks) > 0) then do
+            trks = trks + 1
+            trklst.trks = n strip(word(ln, 8), "T", ")") /* track size in sectors */
+         end
+      end
+   end
+   rc = rxqueue('set,', oldq)
+   rc = rxqueue('delete', qtrk)
+
+   do i = 1 to words(tracks) /* check if all selected tracks exist */
+      t = word(tracks, i)
+      if t > total then do
+         call pmexit "Track" t "Does not exist on this CD"
+      end
+   end
+
+         select
+            when trks = 0 then do
+               disktype = disk_type(cdrom)
+               if disktype = "LEECHMP3DSC" then do
+                  call continue_y_n"Do you want to import this LEECHMP3 CD in MY RECORDS?"
+                  '@START "LEECHMP3: IMPORTING MP3 CD" /c /min /B' pgm "IMPORT" cdrom
+                  exit
+               end
+               call pmexit "No audio track to grab"
+            end
+            when trks = 1 then say trks "track will be grabbed"
+            otherwise do
+            say trks "tracks will be grabbed"
+            end
+         end
+   trklst.0 = trks
+
+         call get_cddb
+         do i = 1 to trklst.0
+            n = word(trklst.i, 1)
+            if symbol("TITLES.N") <> "LIT" then trklst.i = trklst.i titles.n
+         end
+return /* get_ntracks */
+
+
+sort_trks:
+procedure expose trklst. wavqueue
+
+   wavqueue = rxqueue('create')
+   oldq = rxqueue('set', wavqueue)
+
+   /* let's sort tracks in ascending size order */
+   /* so that the shortest track is grabbed first */
+   /* and encoding starts asap */
+
+   do while trklst.0 > 0
+      minptr = trklst.0
+      do i = 1 to (trklst.0)-1
+         if word(trklst.i, 2) < word(trklst.minptr, 2) then minptr = i
+      end
+      queue trklst.minptr
+      i = trklst.0
+      trklst.minptr = trklst.i
+      trklst.0 = i - 1
+   end
+   oldq = rxqueue('set', oldq)
+return /* sort_trks */
+
+
+get_cddir:
+procedure expose global.
+
+   seq = 0
+   do forever
+      seq = seq + 1
+      if seq > 99 then do
+         rep = directory(global.rundir)
+         call pmexit "Cannot create more than 99 disk directories"
+      end
+
+      cddir = "DISK_" ||right(seq, 2, "0")
+      call sysfiletree cddir"\*.*", lst.
+      if lst.0 = 0 then return cddir
+   end
+return cddir /* get_cddir */
+
+
+opendir:
+procedure expose global.
+
+   parse arg dir
+   rc = sysmkdir(dir)
+   if (rc <> 0) & (rc <> 5) then do
+      msg = "Cannot create directory" directory()'\'dir
+      rep = directory(global.rundir)
+      call pmexit msg
+   end
+         rc = syssetobjectdata(directory()"\"dir, "DEFAULTSORT=5;ALWAYSSORT=YES")
+   dir = directory(dir)
+return /* opendir */
+
+
+get_codepage:
+
+   "@chcp 2>nul | rxqueue" cddbq
+   pull cp
+   do queued()
+      pull .
+   end
+return word(cp, words(cp)) /* get_codepage */
+
+
+get_cddb:
+procedure expose getdb cdrom global. category artist album titles.,
+cddb port inifile
+
+   titles.0 = 0
+   getdb = find_prog("querycddb.exe")
+   if getdb = '' then do
+      say "Cannot find program QUERYCDDB.EXE, no CDDB access"
+      call continue_y_n
+      return
+   end
+   cddbq = rxqueue('create')
+   oldq = rxqueue('set', cddbq)
+   if cddb = '' then do
+      msg = "No CDDB url and port defined in file" inifile
+   end
+   else do
+      codepage = get_codepage()
+      say "Connecting to CDDB" cddb":"port
+      "@"getdb cdrom "leechmp3 anonymous" cddb port "| rxqueue" cddbq
+      call sysfiledelete "cddb.out"
+   end
+   if queued() = 0 then do
+      rc = rxqueue('set,', oldq)
+      rc = rxqueue('delete', cddbq)
+      if cddb <> '' then do
+         say
+         msg = "No CDDB connection or cd has no CDDB-ID"
+      end
+      call continue_y_n msg
+      category = "UNTITLED"
+      artist = ""
+      return
+   end
+
+   i = 0
+   do queued()
+      pull q
+      if codepage = 850 then q = translate(q, "AÉÖÑàâÇáäåãìîóñÅ", "¿‚‡‰ÍÎÈÁËÓÔÙˆ˘˚¸") /* To get correct french character set */
+      say q
+      select
+         when word(q, 1) = "CATEGORY:" then category = subword(q, 2)
+         when word(q, 1) = "ARTIST:" then do
+            artist = subword(q, 2)
+            artist = space(strip(translate(artist, '', '?.:!,;/ı"\')))
+         end
+         when word(q, 1) = "TITLE:" then do
+            album = subword(q, 2)
+            album = space(strip(translate(album, '', '?.:!,;/ı"\')))
+         end
+         when substr(q, 1, 5) = "TRACK" then do
+            i = i + 1
+            titles.i = subword(q, 2)
+            titles.i = space(strip(translate(titles.i, '', '?.:!,;/ı"\')))
+         end
+         otherwise nop
+      end
+   end
+   rc = rxqueue('set,', oldq)
+   rc = rxqueue('delete', cddbq)
+   titles.0 = i
+return /* get_cddb */
+
+/**********************************************************************/
+/* grabber section.                                                   */
+/**********************************************************************/
+
+
+get_leechparms:
+
+   leechparms = "-w4096 -o" /* default values */
+   do while lines(inifile) <> 0
+      ln = strip(linein(inifile))
+      parse var ln ln';'.
+      if ln = '' then iterate
+      parse var ln keyword'='val
+      keyword = strip(translate(keyword))
+      select
+         when keyword = "LEECHPARMS" then do
+            leechparms = strip(val)
+         end
+         otherwise nop
+      end
+   end
+   call stream inifile, 'c', 'close'
+return /* get_leechparms */
+
+start_lame:
+
+   mp3queue = rxqueue('create') /* communication queue with mp3 thread */
+   oldq = rxqueue('set', mp3queue)
+   titdir = directory()
+   x = lastpos("\", titdir)
+   pgmtitle = "LEECHMP3: encoding" substr(titdir, x+1)
+   '@START "'pgmtitle'" /C /min /B' pgm "ENCODE" encoder mp3queue lameparms
+return /* start_lame */
+
+
+get_trklst:
+procedure expose wavqueue trklst.
+
+say ''
+   oldq = rxqueue('set', wavqueue)
+   trklst.0 = queued()
+   do i = 1 to trklst.0
+      pull trklst.i
+   end
+   oldq = rxqueue('set', oldq)
+   rc = rxqueue('delete', wavqueue)
+return /* get_trklst */
+
+
+leech:
+
+   /* grabs tracks and pass them to mp3 process */
+   call get_trklst
+   do i = 1 to trklst.0
+      t = word(trklst.i, 1)
+      trktitle = subword(trklst.i, 3)
+      call sayfile "read", strip(t, 'l', '0')
+      if trktitle = '' then
+         call change_title "Leech: reading TRACK_" || right(t, 2, '0')
+      else
+         call change_title "Leech: reading" trktitle
+      "@"grabber cdrom "T" t leechparms
+      if rc <> 0 then do /* process killed */
+         queue "END" /* abort encoding for next track */
+         stopped = 1
+         leave
+      end
+      queue "TRACK_" || right(t, 2, '0') trktitle /* pass file name to encoder */
+   end
+   if stopped <> 1 then do
+      queue 'END' /* stop encoder */
+      queue 'END' /* stop second encoder */
+      '@START "'pgmtitle 'THREAD 2" /C /min /B' pgm "ENCODE" encoder mp3queue lameparms
+   end
+   call sayfile "endread"
+return /* leech */
+
+
+end_cd:
+
+  /* finish grabbing process */
+   oldq = rxqueue('set', oldq)
+   "@EJECT" cdrom
+return /* end_cd */
+
+
+/**********************************************************************/
+/* MP3 encoder section.                                               */
+/**********************************************************************/
+
+lame:
+
+   /* encoding part */
+   oldq = rxqueue('set', qname) /* setup the input queue */
+   do forever
+      if queued() = 0 then do
+         say "Waiting for a track"
+         call change_title "Lame: waiting for a track"
+      end
+      do while queued() = 0 /* wait for something in the queue */
+         call syssleep 1
+      end
+      pull fname trktitle
+      if fname = "END" then leave
+      wavname = fname'.WAV'
+      if substr(fname, 3, 1) = '\' then do /* tonigy */
+         mp3name = substr(fname, 4)'.MP3'
+         tonidrv = substr(fname, 1, 2)
+         wintitle = substr(fname, 4)
+      end
+      else do /* Leech */
+         mp3name = fname'.MP3'
+         tonidrv = ''
+         wintitle = fname
+      end
+      if trktitle = '' then do
+         tt = ''
+         call change_title "Lame: encoding" wintitle
+      end
+      else do
+         tt = "--tt" '"'strip(left(trktitle, 30,' '))'"'
+         call change_title "Lame: encoding" trktitle
+      end
+
+      trkn = strip(right(fname, 2, ' '), 'l', '0')
+      call sayfile "encode", trkn
+
+      "@"encoder lameparms tt wavname  mp3name
+      if rc <> 0 then do
+         call sysfiledelete mp3name
+         if tonidrv = '' then call sysfiledelete wavname
+         iterate
+      end
+      if trktitle <> '' then do
+         trkn = right(trkn, 2, '0')
+      mp3title = strip(substr(trkn trktitle, 1, 27))".mp3"
+      call sysfiledelete mp3title
+      "@rename" mp3name '"'mp3title'"'
+      call set_title mp3title, trktitle
+      end
+      if tonidrv = '' then call sysfiledelete wavname
+   end
+   if tonidrv <> '' then call eject_tonigy(tonidrv)
+return /* lame */
+
+
+set_title:
+procedure
+
+   fname = directory()"\"arg(1)
+   title = arg(2)
+   typeinfo = 'FDFF'x || d2c(length(title)) || '00'x || title
+   call SysPutEA fname, ".LONGNAME", typeinfo
+return /* set_title */
+
+
+make_playlists:
+
+   if lines(titfile) <> 0 then do
+      basedir = linein(titfile)
+      call stream titfile, 'c', 'close'
+      call sysfiledelete titfile
+      dir = directory()
+      do while pos(basedir, dir) = 1
+         foldername = get_name(dir)
+         playlist = "00"foldername".M3U"
+         call sysfiledelete playlist
+         l = length(dir) + 2
+         drop lst.
+         call sysfiletree "*.mp3", lst., 'so'
+         do i = 1 to lst.0
+            call lineout playlist, substr(lst.i, l)
+         end
+         if lst.0 > 0 then do
+            call lineout playlist
+            call set_title playlist, "Listen to all" foldername "tracks"
+         end
+         dir = directory('..')
+      end
+   end
+return /* make_playlists */
+
+
+get_name: procedure
+
+   parse arg fn
+   rc = sysgetea(fn, ".LONGNAME", eadata)
+   select
+      when rc <> 0 then return ''
+      when length(eadata) = 0 then do
+         x = lastpos("\", fn)
+         return substr(fn, x+1)
+      end
+      otherwise return substr(eadata, 5)
+   end
+return '' /* get_name*/
+
+
+end_mp3:
+
+   if queued() = 0 then do /* nomore process running */
+      call sayfile "endenc"
+      rc= rxqueue('set', oldq)
+      rc = rxqueue('delete', qname)
+      call make_playlists
+      do i = 1 to 8 /* make a little noise */
+         call beep 440, 40
+         call beep 550, 40
+         call beep 660, 40
+      end
+   end
+return /* end_mp3 */
+
+/**********************************************************************/
+/* Speech section                                                     */
+/**********************************************************************/
+
+sayfile:
+procedure expose global.
+
+   text = ''
+   do i = 1 to arg()
+      text = text global.progdir"lmsounds\"arg(i)".mp3"
+   end
+   if text = '' then return /* nothing to say */
+
+   if global.player = '' then return
+
+   zpipe = "\pipe\zmp3"
+   snddir = translate(global.progdir"LMSOUNDS")
+   if stream(zpipe, 'c', 'open') = "READY:" then do
+      call charout zpipe, "*status file"
+      curfile = strip(translate(linein(zpipe)))
+      call stream zpipe, 'c', 'close'
+      if pos(snddir, curfile) <> 1 then return /* don't disturb me when I listen something! */
+
+      do 10000
+         ret = syswaitnamedpipe(zpipe)
+         if ret = 0 then do
+            call stream zpipe, 'c', 'open'
+            call charout zpipe, "*add" text
+            call stream zpipe, 'c', 'close'
+            return
+         end
+      end
+   end
+
+   "@detach" global.player text ">nul 2>nul"
+return /* sayfile */
+
+
+/**********************************************************************/
+/* Tonigy section.                                                    */
+/**********************************************************************/
+
+find_tonigy:
+procedure expose tonigypipe
+
+   parse upper arg cdrom
+   if Stream(TonigyPipe, "c", "open")\="READY:" then
+   do
+      say "Tonigy is not running."
+      return ''
+   end
+   Drives=QueryDrivesNumber()
+   do i = 0 to drives
+      idrv = querycdromdrive(i)
+      if idrv = cdrom then do
+         if querystatus(i) <> 1 then do /* attach tonigy drive */
+            call attach i
+         end
+         return querytonigydrive(i)
+      end
+   end
+return '' /* find_tonigy */
+
+
+eject_tonigy:
+procedure expose tonigypipe
+
+   parse upper arg tonigydrive
+   Drives=QueryDrivesNumber()
+   do i = 0 to drives
+      idrv = querytonigydrive(i)
+      if idrv = tonigydrive then do
+         "@eject" querycdromdrive(i)
+         return
+      end
+   end
+return  /* eject_tonigy*/
+
+
+QueryDrivesNumber:
+
+   call CharOut TonigyPipe, "QueryDrivesNumber"
+   parse value LineIn(TonigyPipe) with code drives
+   if code=0 then
+   return drives
+return 0 /* querydrivesnumber */
+
+
+QueryCDROMDrive:
+
+   parse arg drive
+   call CharOut TonigyPipe, "QueryCDROMLetter "drive
+   parse value LineIn(TonigyPipe) with code letter
+   if code=0 then
+   return letter
+return "" /* querycdromdrive */
+
+
+QueryTonigyDrive:
+
+   parse arg drive
+   call CharOut TonigyPipe, "QueryTonigyLetter "drive
+   parse value LineIn(TonigyPipe) with code letter
+   if code=0 then
+   return letter
+return "" /* querytonigydrive */
+
+
+QueryStatus:
+
+   parse arg drive
+   call CharOut TonigyPipe, "QueryStatus "drive
+   parse value LineIn(TonigyPipe) with code status
+   if code=0 then
+   return status
+return 0 /* querystatus */
+
+
+Attach:
+
+   parse arg drive
+   call CharOut TonigyPipe, "Attach "drive
+return LineIn(TonigyPipe) /* attach */
+
+
+get_tonigy_tracks:
+procedure expose cdrom tonigy trks trklst. tracks global. titles.,
+category artist album cddb port inifile disktype pgm
+
+   /* Determines the number of audio tracks on the cd */
+
+   trks = 0
+   call sysfiletree tonigy"\*.wav", lst., "so"
+   if lst.0 = 0 then do
+      disktype = disk_type(cdrom)
+      if disktype = "LEECHMP3DSC" then do
+         call continue_y_n"Do you want to import this LEECHMP3 CD in MY RECORDS?"
+         '@START "LEECHMP3: IMPORTING MP3 CD" /C /min /B' pgm "IMPORT" cdrom
+         exit
+      end
+      call sayfile "notready"
+      call pmexit "Drive" cdrom "not ready or in use"
+   end
+   total = lst.0
+   do n = 1  to total
+      if (tracks = "") | (wordpos(n, tracks) > 0) then do
+            trks = trks + 1
+            trklst.trks = n
+      end
+   end
+
+   do i = 1 to words(tracks) /* check if all selected tracks exist */
+      t = word(tracks, i)
+      if t > total then do
+         call pmexit "Track" t "Does not exist on this CD"
+      end
+   end
+
+         select
+            when trks = 0 then do
+               call pmexit "No audio track to grab"
+            end
+            when trks = 1 then say trks "track will be grabbed"
+            otherwise do
+            say trks "tracks will be grabbed"
+            end
+         end
+   trklst.0 = trks
+
+         call get_cddb
+         do i = 1 to trklst.0
+            n = word(trklst.i, 1)
+            if symbol("TITLES.N") <> "LIT" then trklst.i = trklst.i titles.n
+         end
+return /* get_tonigy_ntracks */
+
+
+lame_tonigy:
+
+   call start_lame
+   do i = 1 to trklst.0
+      parse var trklst.i t trktitle
+      queue tonigy"\TRACK" || right(t, 2, '0') trktitle /* pass file name to encoder */
+   end
+   queue 'END'
+return /* lame_tonigy */
+
+
+/**********************************************************************/
+/* import cd section.                                                 */
+/**********************************************************************/
+
+
+disk_type:
+procedure
+
+   parse arg cdrom
+   label = sysdriveinfo(cdrom)
+   if label = '' then return ''
+   if stream(cdrom"\tracks.lst", 'c', 'query exist') = '' then return ''
+   if stream(cdrom"\00MY RECORDS.M3U", 'c', 'query exist') = '' then return ''
+return word(label, words(label)) /* disk_type */
+
+
+import_cd:
+procedure expose cdrom global.
+
+   basedir = global.rundir
+   call sysfiletree cdrom"\*.*", dirs., "do"
+   do i = 1 to dirs.0
+      x = lastpos("\", dirs.i) + 1
+      call change_title "LEECHMP3: Importing directory" substr(dirs.i, x)
+      if dirs.i = cdrom"\UNTITLED" then call load_untitled /* special case */
+      else do
+         dest = basedir || substr(dirs.i, 3)
+         rc = sysmkdir(dest)
+         "@xcopy" dirs.i"\*.mp3" dest "/e /t /h /s >nul 2>nul"
+      end
+   end
+   call reset_titles
+   call sort_folders
+   call rebuild_playlists
+   call end_import
+exit /* import_cd */
+
+
+reset_titles:
+
+   playlist = cdrom"\00MY RECORDS.M3U"
+   titles = cdrom"\TRACKS.LST"
+   do while lines(playlist) <> 0
+      file = linein(playlist)
+      title = linein(titles)
+      if pos("UNTITLED", file) = 1 then iterate
+      if title = '' then iterate
+      file = basedir"\"file
+      fdir = filespec('d', file) ||filespec('p', file)
+      fdir = delstr(fdir, length(fdir))
+      wrkdir = directory(fdir)
+      file = filespec('n', file)
+      call set_title file, title
+   end
+   call stream playlist, 'c', 'close'
+   call stream titles, 'c', 'close'
+   dir = directory(basedir)
+return /* reset_titles */
+
+
+sort_folders:
+
+   call sysfiletree basedir"\*.*", dirs., "dso"
+   do i = 1 to dirs.0
+      rc = syssetobjectdata(dirs.i, "DEFAULTSORT=5;ALWAYSSORT=YES")
+   end
+return /* sort_folders */
+
+
+load_untitled:
+
+   dir = directory(basedir)
+   rc = sysmkdir("UNTITLED")
+   dir = directory(basedir"\UNTITLED")
+   call sysfiletree cdrom"\UNTITLED\*.*", lst., "do"
+   do i = 1 to lst.0
+      cddir = get_cddir()
+      rc = sysmkdir(cddir)
+      "@xcopy" lst.i"\*.mp3" cddir "/e /t /h /s >nul 2>nul"
+   end
+   dir = directory(basedir)
+return /* load_untitled */
+
+
+rebuild_playlists:
+
+   call sysfiletree "*.*", lst., "so", "-+--"
+   do i = 1 to lst.0
+      call make_playlist lst.i
+   end
+   call make_playlist basedir
+return /* rebuild_playlists */
+
+
+make_playlist:
+procedure
+
+   parse arg dir
+   dir = directory(dir)
+   x = lastpos("\", dir)
+   if x = length(dir) then do /* disk root */
+      playlist = "ROOT.M3U"
+      l = x + 1
+   end
+   else do
+      foldername = get_name(dir)
+      playlist = "00"foldername".M3U"
+      l = length(dir) + 2
+   end
+   call sysfiledelete playlist
+   call sysfiletree "*.MP3", lst., "so"
+   do i = 1 to lst.0
+      call lineout playlist, substr(lst.i, l)
+   end
+   if lst.0 > 0 then do
+      call lineout playlist
+      call set_title playlist, "Listen to all" foldername "tracks"
+   end
+return /* make_playlist */
+
+
+end_import:
+
+   "@eject" cdrom
+      do i = 1 to 8 /* make a little noise */
+         call beep 440, 40
+         call beep 550, 40
+         call beep 660, 40
+      end
+exit /* end_import */
